@@ -5,24 +5,35 @@
     <h3 class="text-xl font-semibold mb-2">My Courses</h3>
     <ul class="mb-6">
       <li v-for="course in myCourses" :key="course.id" class="mb-2 p-2 border rounded">
-        {{ course.code }} - {{ course.name }}
+        <button @click="selectCourse(course)" class="text-left w-full">
+          {{ course.code }} - {{ course.name }}
+        </button>
       </li>
     </ul>
 
     <EnrollCourse :studentId="studentId" @enrolled="loadMyCourses" />
+
+    <!-- 成绩展示 -->
+    <FinalResult
+      v-if="selectedCourse"
+      :studentId="studentId"
+      :courseId="selectedCourse.id"
+    />
   </div>
 </template>
 
 <script>
 import EnrollCourse from './EnrollCourse.vue'
+import FinalResult from './FinalResult.vue'
 
 export default {
-  components: { EnrollCourse },
+  components: { EnrollCourse, FinalResult },
   data() {
     return {
       studentId: localStorage.getItem('user_id'),
       studentName: localStorage.getItem('name'),
-      myCourses: []
+      myCourses: [],
+      selectedCourse: null
     }
   },
   methods: {
@@ -32,6 +43,9 @@ export default {
       if (data.success) {
         this.myCourses = data.courses;
       }
+    },
+    selectCourse(course) {
+      this.selectedCourse = course;
     }
   },
   mounted() {

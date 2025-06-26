@@ -10,6 +10,7 @@ import LecturerDashboard from '../views/lecturer/LecturerDashboard.vue';
 import LecturerCourses from '../views/lecturer/LecturerCourses.vue';
 import LecturerCourseView from '../views/lecturer/LecturerCourseView.vue';
 import StudentDashboard from '../views/students/StudentDashboard.vue';
+import CourseDetail from '../views/lecturer/CourseDetail.vue';
 
 const routes = [
   {
@@ -25,6 +26,7 @@ const routes = [
   { path: '/admin/users/add', component: AddUser },
   { path: '/lecturer/login', component: LecturerLogin },
   { path: '/lecturer/dashboard', component: LecturerDashboard },
+  { path: '/lecturer/course-detail/:id', component: CourseDetail },
   { path: '/lecturer/my-courses', component: LecturerCourses },
   { path: '/lecturer/course/:id', component: LecturerCourseView },
   { path: '/student/login', component: StudentLogin },

@@ -1,20 +1,25 @@
 <template>
-  <div class="p-6">
-    <h1 class="text-2xl font-bold mb-4">Lecturer Dashboard</h1>
+  <div class="dashboard-container">
+    <h1 class="title">Lecturer Dashboard</h1>
 
-    <h2 class="text-xl font-semibold mb-2">My Courses</h2>
-    <ul>
-      <li
-        v-for="course in courses"
-        :key="course.id"
-        class="mb-2"
-      >
-        <router-link
-          :to="`/lecturer/course/${course.id}`"
-          class="text-blue-600 underline"
-        >
-          {{ course.code }} - {{ course.name }} ➡ Grade Students
-        </router-link>
+    <h2 class="subtitle">My Courses</h2>
+    <ul class="course-list">
+      <li v-for="course in courses" :key="course.id" class="course-card">
+        <p class="course-name">{{ course.code }} - {{ course.name }}</p>
+        <div class="button-group">
+          <router-link
+            :to="`/lecturer/course/${course.id}`"
+            class="btn btn-green"
+          >
+            📝 Grade Students
+          </router-link>
+          <router-link
+            :to="`/lecturer/course-detail/${course.id}`"
+            class="btn btn-blue"
+          >
+            ➕ Add Assessment Component
+          </router-link>
+        </div>
       </li>
     </ul>
   </div>
@@ -43,3 +48,69 @@ export default {
   }
 }
 </script>
+
+<style>
+.dashboard-container {
+  padding: 24px;
+  font-family: Arial, sans-serif;
+}
+
+.title {
+  font-size: 24px;
+  font-weight: bold;
+  margin-bottom: 16px;
+}
+
+.subtitle {
+  font-size: 20px;
+  margin-bottom: 12px;
+}
+
+.course-list {
+  list-style: none;
+  padding: 0;
+}
+
+.course-card {
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.course-name {
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+
+.button-group {
+  display: flex;
+  gap: 12px;
+}
+
+.btn {
+  padding: 8px 16px;
+  border: none;
+  text-decoration: none;
+  color: white;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.btn-green {
+  background-color: #28a745;
+}
+
+.btn-green:hover {
+  background-color: #218838;
+}
+
+.btn-blue {
+  background-color: #007bff;
+}
+
+.btn-blue:hover {
+  background-color: #0056b3;
+}
+</style>

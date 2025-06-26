@@ -8,6 +8,7 @@ $app = AppFactory::create();
 
 // ✅ 添加这行：支持 JSON 和表单 POST 数据
 $app->addBodyParsingMiddleware();
+$app->addRoutingMiddleware();
 
 $app->add(function ($request, $handler) {
     $response = $handler->handle($request);
