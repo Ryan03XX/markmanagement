@@ -2,9 +2,37 @@
 use Slim\App;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
+use Firebase\JWT\JWT;
+use Firebase\JWT\Key;
+use App\Middleware\AuthMiddleware;
+require_once __DIR__ . '/utils.php';
 
 return function (App $app, PDO $pdo) {
     //Student login
+    // $app->post('/api/login', function (Request $request, Response $response) use ($pdo) {
+    //     $data = $request->getParsedBody();
+    //     $matricNo = $data['matric_no'] ?? '';
+    //     $password = $data['password'] ?? '';
+
+    //     $stmt = $pdo->prepare("SELECT * FROM users WHERE matric_no = ?");
+    //     $stmt->execute([$matricNo]);
+    //     $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    //     if ($user && hash('sha256', $password) === $user['password']) {
+    //         unset($user['password']);
+    //         $response->getBody()->write(json_encode([
+    //             'success' => true,
+    //             'user' => $user
+    //         ]));
+    //     } else {
+    //         $response->getBody()->write(json_encode([
+    //             'success' => false,
+    //             'message' => 'Invalid Matric Number or Password'
+    //         ]));
+    //     }
+
+    //     return $response->withHeader('Content-Type', 'application/json');
+    // });
     $app->post('/api/login', function (Request $request, Response $response) use ($pdo) {
         $data = $request->getParsedBody();
         $matricNo = $data['matric_no'] ?? '';
@@ -15,10 +43,15 @@ return function (App $app, PDO $pdo) {
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if ($user && hash('sha256', $password) === $user['password']) {
-            unset($user['password']);
+            $token = generateJWT($user, $_ENV['JWT_SECRET']);
             $response->getBody()->write(json_encode([
                 'success' => true,
-                'user' => $user
+                'token' => $token,
+                'user' => [
+                    'id' => $user['id'],
+                    'name' => $user['name'],
+                    'role' => $user['role']
+                ]
             ]));
         } else {
             $response->getBody()->write(json_encode([
@@ -30,6 +63,30 @@ return function (App $app, PDO $pdo) {
         return $response->withHeader('Content-Type', 'application/json');
     });
     // Staff login
+    // $app->post('/api/login/staff', function (Request $request, Response $response) use ($pdo) {
+    //     $data = $request->getParsedBody();
+    //     $email = $data['email'] ?? '';
+    //     $password = $data['password'] ?? '';
+
+    //     $stmt = $pdo->prepare("SELECT * FROM users WHERE email = ?");
+    //     $stmt->execute([$email]);
+    //     $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    //     if ($user && hash('sha256', $password) === $user['password']) {
+    //         unset($user['password']);
+    //         $response->getBody()->write(json_encode([
+    //             'success' => true,
+    //             'user' => $user
+    //         ]));
+    //     } else {
+    //         $response->getBody()->write(json_encode([
+    //             'success' => false,
+    //             'message' => 'Invalid Email or Password'
+    //         ]));
+    //     }
+
+    //     return $response->withHeader('Content-Type', 'application/json');
+    // });
     $app->post('/api/login/staff', function (Request $request, Response $response) use ($pdo) {
         $data = $request->getParsedBody();
         $email = $data['email'] ?? '';
@@ -40,10 +97,21 @@ return function (App $app, PDO $pdo) {
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if ($user && hash('sha256', $password) === $user['password']) {
+            // 生成 JWT
+            $token = generateJWT($user, $_ENV['JWT_SECRET']);
+
+            // 返回用户信息（去掉密码）
             unset($user['password']);
+
             $response->getBody()->write(json_encode([
                 'success' => true,
-                'user' => $user
+                'token' => $token,
+                'user' => [
+                    'id' => $user['id'],
+                    'name' => $user['name'],
+                    'email' => $user['email'],
+                    'role' => $user['role'],
+                ]
             ]));
         } else {
             $response->getBody()->write(json_encode([
@@ -55,44 +123,193 @@ return function (App $app, PDO $pdo) {
         return $response->withHeader('Content-Type', 'application/json');
     });
     // Register
+    // $app->post('/api/register', function (Request $request, Response $response) use ($pdo) {
+    //     $data = $request->getParsedBody();
+    //     $name = $data['name'] ?? '';
+    //     $matricNo = $data['matric_no'] ?? '';
+    //     $password = $data['password'] ?? '';
+    //     $role = $data['role'] ?? '';
+
+    //     if (!$name || !$matricNo || !$password || !$role) {
+    //         $response->getBody()->write(json_encode([
+    //             'success' => false,
+    //             'message' => 'All fields are required'
+    //         ]));
+    //         return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+    //     }
+
+    //     // Check if matric number already exists
+    //     $stmt = $pdo->prepare("SELECT * FROM users WHERE matric_no = ?");
+    //     $stmt->execute([$matricNo]);
+    //     if ($stmt->fetch()) {
+    //         $response->getBody()->write(json_encode([
+    //             'success' => false,
+    //             'message' => 'Matric number already exists'
+    //         ]));
+    //         return $response->withStatus(409)->withHeader('Content-Type', 'application/json');
+    //     }
+
+    //     $hashedPassword = hash('sha256', $password);
+
+    //     $stmt = $pdo->prepare("INSERT INTO users (name, matric_no, password, role) VALUES (?, ?, ?, ?)");
+    //     $stmt->execute([$name, $matricNo, $hashedPassword, $role]);
+
+    //     $response->getBody()->write(json_encode([
+    //         'success' => true,
+    //         'message' => 'User registered successfully'
+    //     ]));
+
+    //     return $response->withHeader('Content-Type', 'application/json');
+    // });
     $app->post('/api/register', function (Request $request, Response $response) use ($pdo) {
         $data = $request->getParsedBody();
+
         $name = $data['name'] ?? '';
-        $matricNo = $data['matric_no'] ?? '';
         $password = $data['password'] ?? '';
         $role = $data['role'] ?? '';
+        $matricNo = $data['matric_no'] ?? null;
+        $email = $data['email'] ?? null;
 
-        if (!$name || !$matricNo || !$password || !$role) {
-            $response->getBody()->write(json_encode([
+        $payload = [];
+
+        // Basic validation
+        if (!$name || !$password || !$role) {
+            $payload = [
                 'success' => false,
-                'message' => 'All fields are required'
-            ]));
+                'message' => 'Name, password, and role are required'
+            ];
+            $response->getBody()->write(json_encode($payload));
             return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
         }
 
-        // Check if matric number already exists
-        $stmt = $pdo->prepare("SELECT * FROM users WHERE matric_no = ?");
-        $stmt->execute([$matricNo]);
-        if ($stmt->fetch()) {
-            $response->getBody()->write(json_encode([
+        // Role-based field check
+        if (in_array($role, ['admin', 'lecturer']) && !$email) {
+            $payload = [
                 'success' => false,
-                'message' => 'Matric number already exists'
-            ]));
-            return $response->withStatus(409)->withHeader('Content-Type', 'application/json');
+                'message' => 'Email is required for admin/lecturer'
+            ];
+            $response->getBody()->write(json_encode($payload));
+            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
         }
 
-        $hashedPassword = hash('sha256', $password);
+        if ($role === 'student' && !$matricNo) {
+            $payload = [
+                'success' => false,
+                'message' => 'Matric number is required for students'
+            ];
+            $response->getBody()->write(json_encode($payload));
+            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+        }
 
-        $stmt = $pdo->prepare("INSERT INTO users (name, matric_no, password, role) VALUES (?, ?, ?, ?)");
-        $stmt->execute([$name, $matricNo, $hashedPassword, $role]);
+        // Check for duplicates
+        if ($role === 'student') {
+            $stmt = $pdo->prepare("SELECT * FROM users WHERE matric_no = ?");
+            $stmt->execute([$matricNo]);
+            if ($stmt->fetch()) {
+                $payload = [
+                    'success' => false,
+                    'message' => 'Matric number already exists'
+                ];
+                $response->getBody()->write(json_encode($payload));
+                return $response->withStatus(409)->withHeader('Content-Type', 'application/json');
+            }
+        } else {
+            $stmt = $pdo->prepare("SELECT * FROM users WHERE email = ?");
+            $stmt->execute([$email]);
+            if ($stmt->fetch()) {
+                $payload = [
+                    'success' => false,
+                    'message' => 'Email already exists'
+                ];
+                $response->getBody()->write(json_encode($payload));
+                return $response->withStatus(409)->withHeader('Content-Type', 'application/json');
+            }
+        }
+
+        // Insert user
+        $hashedPassword = hash('sha256', $password);
+        $stmt = $pdo->prepare("INSERT INTO users (name, email, matric_no, password, role) VALUES (?, ?, ?, ?, ?)");
+        $stmt->execute([
+            $name,
+            $email,
+            $matricNo,
+            $hashedPassword,
+            $role
+        ]);
+
+        $payload = [
+            'success' => true,
+            'message' => 'User registered successfully'
+        ];
+        $response->getBody()->write(json_encode($payload));
+        return $response->withHeader('Content-Type', 'application/json');
+    })->add(new AuthMiddleware($_ENV['JWT_SECRET'], 'admin'));
+    // admin delete user
+    $app->delete('/api/users/{id}', function (Request $request, Response $response, array $args) use ($pdo) {
+        $id = $args['id'];
+
+        // 检查用户是否存在
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
+        $stmt->execute([$id]);
+        $user = $stmt->fetch();
+
+        if (!$user) {
+            $payload = [
+                'success' => false,
+                'message' => 'User not found'
+            ];
+            $response->getBody()->write(json_encode($payload));
+            return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+        }
+
+        // 删除用户
+        $stmt = $pdo->prepare("DELETE FROM users WHERE id = ?");
+        $stmt->execute([$id]);
+
+        $payload = [
+            'success' => true,
+            'message' => 'User deleted successfully'
+        ];
+        $response->getBody()->write(json_encode($payload));
+        return $response->withHeader('Content-Type', 'application/json');
+    })->add(new AuthMiddleware($_ENV['JWT_SECRET'], 'admin'));
+
+    $app->get('/api/users', function (Request $request, Response $response) use ($pdo) {
+        $stmt = $pdo->query("SELECT id, name, email, role, matric_no FROM users");
+        $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $payload = ['users' => $users];
+        $response->getBody()->write(json_encode($payload));
+        return $response->withHeader('Content-Type', 'application/json');
+    })->add(new AuthMiddleware($_ENV['JWT_SECRET'], 'admin'));
+
+    $app->put('/api/users/{id}/password', function (Request $request, Response $response, $args) use ($pdo) {
+        $id = $args['id'];
+        $data = $request->getParsedBody();
+        $newPassword = $data['password'] ?? '';
+
+        if (!$newPassword) {
+            return $response->withStatus(400)->withHeader('Content-Type', 'application/json')
+                ->write(json_encode([
+                    'success' => false,
+                    'message' => 'Password is required'
+                ]));
+        }
+
+        // 加密密码
+        $hashedPassword = hash('sha256', $newPassword);
+
+        // 更新数据库
+        $stmt = $pdo->prepare("UPDATE users SET password = ? WHERE id = ?");
+        $stmt->execute([$hashedPassword, $id]);
 
         $response->getBody()->write(json_encode([
             'success' => true,
-            'message' => 'User registered successfully'
+            'message' => 'Password updated successfully'
         ]));
-
         return $response->withHeader('Content-Type', 'application/json');
-    });
+    })->add(new AuthMiddleware($_ENV['JWT_SECRET'], 'admin'));
+
     // Admin create courses
     $app->post('/api/courses', function ($request, $response) use ($pdo) {
         $data = $request->getParsedBody();
@@ -201,7 +418,7 @@ return function (App $app, PDO $pdo) {
 
             // 获取 final_exam_mark
             $finalStmt = $pdo->prepare("
-                SELECT final_exam_mark, final_mark
+                SELECT final_exam_mark, final_mark, feedback
                 FROM final_results
                 WHERE student_id = ? AND course_id = ?
                 LIMIT 1
@@ -216,6 +433,7 @@ return function (App $app, PDO $pdo) {
             $student['scores'] = $scores;
             $student['final_exam_mark'] = $final['final_exam_mark'] ?? 0;
             $student['final_mark'] = $final['final_mark'] ?? 0;
+            $student['feedback'] = $final['feedback'] ?? '';
         }
 
         $response->getBody()->write(json_encode([
@@ -226,15 +444,65 @@ return function (App $app, PDO $pdo) {
     });
 
     // Lecturer grade students
+    // $app->post('/api/lecturer/grade', function (Request $request, Response $response) use ($pdo) {
+    //     $data = $request->getParsedBody();
+
+    //     $courseId = $data['course_id'];
+    //     $studentId = $data['student_id'];
+    //     $componentScores = $data['component_scores']; // e.g. { 1: 12.5, 2: 8.0 }
+    //     $finalExamMark = $data['final_exam_mark'];
+
+    //     // Step 1: 保存 component_grades
+    //     foreach ($componentScores as $componentId => $mark) {
+    //         $stmt = $pdo->prepare("
+    //             INSERT INTO component_grades (course_id, student_id, component_id, component_mark)
+    //             VALUES (?, ?, ?, ?)
+    //             ON DUPLICATE KEY UPDATE component_mark = VALUES(component_mark)
+    //         ");
+    //         $stmt->execute([$courseId, $studentId, $componentId, $mark]);
+    //     }
+
+    //     // Step 2: 计算 component 成绩
+    //     $componentMark = 0;
+    //     foreach ($componentScores as $componentId => $score) {
+    //         $stmt = $pdo->prepare("SELECT weight FROM assessment_components WHERE id = ?");
+    //         $stmt->execute([$componentId]);
+    //         $component = $stmt->fetch(PDO::FETCH_ASSOC);
+    //         if ($component) {
+    //             $componentMark += $score * ($component['weight'] / 100);
+    //         }
+    //     }
+
+    //     // Step 3: 计算 final_mark
+    //     $finalMark = round(($componentMark * 0.7) + ($finalExamMark * 0.3), 2);
+
+    //     // Step 4: 保存到 final_results 表
+    //     $stmt = $pdo->prepare("
+    //         INSERT INTO final_results (course_id, student_id, final_exam_mark, final_mark)
+    //         VALUES (?, ?, ?, ?)
+    //         ON DUPLICATE KEY UPDATE
+    //             final_exam_mark = VALUES(final_exam_mark),
+    //             final_mark = VALUES(final_mark),
+    //             updated_at = CURRENT_TIMESTAMP
+    //     ");
+    //     $stmt->execute([$courseId, $studentId, $finalExamMark, $finalMark]);
+
+    //     $response->getBody()->write(json_encode([
+    //         'success' => true,
+    //         'message' => 'Grades and final mark saved'
+    //     ]));
+
+    //     return $response->withHeader('Content-Type', 'application/json');
+    // });
     $app->post('/api/lecturer/grade', function (Request $request, Response $response) use ($pdo) {
         $data = $request->getParsedBody();
 
         $courseId = $data['course_id'];
         $studentId = $data['student_id'];
-        $componentScores = $data['component_scores']; // e.g. { 1: 12.5, 2: 8.0 }
+        $componentScores = $data['component_scores'];
         $finalExamMark = $data['final_exam_mark'];
+        $feedback = $data['feedback'] ?? null;
 
-        // Step 1: 保存 component_grades
         foreach ($componentScores as $componentId => $mark) {
             $stmt = $pdo->prepare("
                 INSERT INTO component_grades (course_id, student_id, component_id, component_mark)
@@ -244,7 +512,6 @@ return function (App $app, PDO $pdo) {
             $stmt->execute([$courseId, $studentId, $componentId, $mark]);
         }
 
-        // Step 2: 计算 component 成绩
         $componentMark = 0;
         foreach ($componentScores as $componentId => $score) {
             $stmt = $pdo->prepare("SELECT weight FROM assessment_components WHERE id = ?");
@@ -255,35 +522,135 @@ return function (App $app, PDO $pdo) {
             }
         }
 
-        // Step 3: 计算 final_mark
         $finalMark = round(($componentMark * 0.7) + ($finalExamMark * 0.3), 2);
 
-        // Step 4: 保存到 final_results 表
         $stmt = $pdo->prepare("
-            INSERT INTO final_results (course_id, student_id, final_exam_mark, final_mark)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO final_results (course_id, student_id, final_exam_mark, final_mark, feedback)
+            VALUES (?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 final_exam_mark = VALUES(final_exam_mark),
                 final_mark = VALUES(final_mark),
+                feedback = VALUES(feedback),
                 updated_at = CURRENT_TIMESTAMP
         ");
-        $stmt->execute([$courseId, $studentId, $finalExamMark, $finalMark]);
+        $stmt->execute([$courseId, $studentId, $finalExamMark, $finalMark, $feedback]);
 
-        $response->getBody()->write(json_encode([
-            'success' => true,
-            'message' => 'Grades and final mark saved'
-        ]));
+        $stmt = $pdo->prepare("SELECT code, name FROM courses WHERE id = ?");
+        $stmt->execute([$courseId]);
+        $course = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($course) {
+            $courseCode = $course['code'];
+            $courseName = $course['name'];
+            $message = "Your grade for [{$courseCode} - {$courseName}] has been updated.";
+            //  Final Mark: {$finalMark}
+        } else {
+            $message = "Your grade for Course ID {$courseId} has been updated.";
+            //  Final Mark: {$finalMark}
+        }
+
+        $stmt = $pdo->prepare("INSERT INTO notifications (student_id, message, created_at) VALUES (?, ?, NOW())");
+        $stmt->execute([$studentId, $message]);
+
+            $response->getBody()->write(json_encode([
+                'success' => true,
+                'message' => 'Grades and final mark saved'
+            ]));
 
         return $response->withHeader('Content-Type', 'application/json');
-    });
+    })->add(new AuthMiddleware($_ENV['JWT_SECRET'], 'lecturer'));
+    // $app->post('/api/lecturer/grade', function (Request $request, Response $response) use ($pdo) {
+    //     $data = $request->getParsedBody();
 
+    //     $courseId = $data['course_id'] ?? null;
+    //     $grades = $data['grades'] ?? [];
+
+    //     if (!$courseId || !is_array($grades)) {
+    //         $response->getBody()->write(json_encode(['error' => 'Missing course_id or grades']));
+    //         return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+    //     }
+
+    //     // 查询课程名称
+    //     $courseNameStmt = $pdo->prepare("SELECT name FROM courses WHERE id = ?");
+    //     $courseNameStmt->execute([$courseId]);
+    //     $course = $courseNameStmt->fetch();
+    //     $courseName = $course ? $course['name'] : "Unknown Course";
+
+    //     foreach ($grades as $entry) {
+    //         $studentId = $entry['student_id'];
+    //         $componentGrade = $entry['component_grade'];
+    //         $finalExamGrade = $entry['final_exam_grade'];
+
+    //         // 插入/更新 component_grades
+    //         $stmt = $pdo->prepare("
+    //             INSERT INTO component_grades (student_id, course_id, grade)
+    //             VALUES (?, ?, ?)
+    //             ON DUPLICATE KEY UPDATE grade = VALUES(grade)
+    //         ");
+    //         $stmt->execute([$studentId, $courseId, $componentGrade]);
+
+    //         // 插入/更新 final_exam_grades
+    //         $stmt = $pdo->prepare("
+    //             INSERT INTO final_exam_grades (student_id, course_id, grade)
+    //             VALUES (?, ?, ?)
+    //             ON DUPLICATE KEY UPDATE grade = VALUES(grade)
+    //         ");
+    //         $stmt->execute([$studentId, $courseId, $finalExamGrade]);
+
+    //         // 计算最终分数
+    //         $finalMark = round(($componentGrade * 0.7) + ($finalExamGrade * 0.3), 2);
+
+    //         // 插入/更新 final_results
+    //         $stmt = $pdo->prepare("
+    //             INSERT INTO final_results (student_id, course_id, final_mark)
+    //             VALUES (?, ?, ?)
+    //             ON DUPLICATE KEY UPDATE final_mark = VALUES(final_mark)
+    //         ");
+    //         $stmt->execute([$studentId, $courseId, $finalMark]);
+
+    //         // 插入通知
+    //         $message = "Your grades for Course ID {$courseId} - {$courseName} have been updated.";
+    //         $stmt = $pdo->prepare("
+    //             INSERT INTO notifications (student_id, message)
+    //             VALUES (?, ?)
+    //         ");
+    //         $stmt->execute([$studentId, $message]);
+    //     }
+
+    //     $response->getBody()->write(json_encode(['message' => 'Grades saved and students notified.']));
+    //     return $response->withHeader('Content-Type', 'application/json');
+    // })->add(new AuthMiddleware($_ENV['JWT_SECRET'], 'lecturer'));
+
+
+    // $app->get('/api/student/{id}/courses', function ($request, $response, $args) use ($pdo) {
+    //     $studentId = $args['id'];
+
+    //     $stmt = $pdo->prepare("
+    //         SELECT c.id, c.code, c.name 
+    //         FROM courses c
+    //         JOIN course_enrollments ce ON ce.course_id = c.id
+    //         WHERE ce.student_id = ?
+    //     ");
+    //     $stmt->execute([$studentId]);
+    //     $courses = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    //     $response->getBody()->write(json_encode([
+    //         'success' => true,
+    //         'courses' => $courses
+    //     ]));
+    //     return $response->withHeader('Content-Type', 'application/json');
+    // });
     $app->get('/api/student/{id}/courses', function ($request, $response, $args) use ($pdo) {
         $studentId = $args['id'];
 
         $stmt = $pdo->prepare("
-            SELECT c.id, c.code, c.name 
+            SELECT 
+                c.id, c.code, c.name,
+                rr.status AS remark_status
             FROM courses c
             JOIN course_enrollments ce ON ce.course_id = c.id
+            LEFT JOIN remark_requests rr 
+                ON rr.course_id = c.id AND rr.student_id = ce.student_id
             WHERE ce.student_id = ?
         ");
         $stmt->execute([$studentId]);
@@ -296,8 +663,26 @@ return function (App $app, PDO $pdo) {
         return $response->withHeader('Content-Type', 'application/json');
     });
 
+    // $app->get('/api/courses/simple', function ($request, $response) use ($pdo) {
+    //     $stmt = $pdo->query("SELECT id, code, name FROM courses");
+    //     $courses = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    //     $response->getBody()->write(json_encode([
+    //         'success' => true,
+    //         'courses' => $courses
+    //     ]));
+    //     return $response->withHeader('Content-Type', 'application/json');
+    // });
     $app->get('/api/courses/simple', function ($request, $response) use ($pdo) {
-        $stmt = $pdo->query("SELECT id, code, name FROM courses");
+        $stmt = $pdo->query("
+            SELECT 
+                courses.id, 
+                courses.code, 
+                courses.name, 
+                users.name AS instructor 
+            FROM courses
+            LEFT JOIN users ON courses.lecturer_id = users.id
+        ");
         $courses = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         $response->getBody()->write(json_encode([
@@ -338,6 +723,31 @@ return function (App $app, PDO $pdo) {
         $response->getBody()->write(json_encode([
             'success' => true,
             'message' => 'Enrolled successfully'
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+    });
+
+    $app->get('/api/student/{id}/enrolled-courses', function ($request, $response, $args) use ($pdo) {
+        $studentId = $args['id'];
+
+        // 查找学生已报名的课程（带上课程代码、名称和讲师）
+        $stmt = $pdo->prepare("
+            SELECT 
+                courses.id,
+                courses.code,
+                courses.name,
+                users.name AS instructor
+            FROM course_enrollments
+            JOIN courses ON course_enrollments.course_id = courses.id
+            LEFT JOIN users ON courses.lecturer_id = users.id
+            WHERE course_enrollments.student_id = ?
+        ");
+        $stmt->execute([$studentId]);
+        $courses = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'courses' => $courses
         ]));
         return $response->withHeader('Content-Type', 'application/json');
     });
@@ -428,5 +838,312 @@ return function (App $app, PDO $pdo) {
 
         return $response->withHeader('Content-Type', 'application/json');
     });
+    // Lecturer course ranking
+    $app->get('/api/lecturer/course-ranking/{course_id}', function ($request, $response, $args) use ($pdo) {
+        $courseId = $args['course_id'];
 
+        // 获取课程名称
+        $courseStmt = $pdo->prepare("SELECT name FROM courses WHERE id = ?");
+        $courseStmt->execute([$courseId]);
+        $course = $courseStmt->fetch(PDO::FETCH_ASSOC);
+        $courseName = $course ? $course['name'] : 'Unknown Course';
+
+        // 获取课程中所有学生及其总分
+        $stmt = $pdo->prepare("
+            SELECT u.id AS student_id, u.name, u.matric_no, fr.final_mark
+            FROM users u
+            JOIN final_results fr ON u.id = fr.student_id
+            WHERE fr.course_id = ? AND u.role = 'student'
+            ORDER BY fr.final_mark DESC
+        ");
+        $stmt->execute([$courseId]);
+        $ranking = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // 为每个学生附加 component 分数
+        foreach ($ranking as &$student) {
+            $compStmt = $pdo->prepare("
+                SELECT ac.name, cg.component_mark AS mark
+                FROM component_grades cg
+                JOIN assessment_components ac ON cg.component_id = ac.id
+                WHERE cg.student_id = ? AND cg.course_id = ?
+            ");
+            $compStmt->execute([$student['student_id'], $courseId]);
+            $student['components'] = $compStmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'course_name' => $courseName,
+            'ranking' => $ranking
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+    });
+    // Lecturer course ranking export to CSV
+    $app->get('/api/lecturer/course-ranking/{course_id}/export', function ($request, $response, $args) use ($pdo) {
+        $courseId = $args['course_id'];
+
+        // 获取课程名称
+        $courseStmt = $pdo->prepare("SELECT name FROM courses WHERE id = ?");
+        $courseStmt->execute([$courseId]);
+        $course = $courseStmt->fetch(PDO::FETCH_ASSOC);
+        $courseName = $course ? $course['name'] : 'Unknown Course';
+
+        // 获取学生排名
+        $stmt = $pdo->prepare("
+            SELECT u.id AS student_id, u.name, u.matric_no, fr.final_mark
+            FROM users u
+            JOIN final_results fr ON u.id = fr.student_id
+            WHERE fr.course_id = ? AND u.role = 'student'
+            ORDER BY fr.final_mark DESC
+        ");
+        $stmt->execute([$courseId]);
+        $ranking = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // 生成 CSV 内容
+        $csvData = [];
+        $csvData[] = ['Rank', 'Student Name', 'Matric No', 'Final Mark'];
+        foreach ($ranking as $index => $student) {
+            $csvData[] = [
+                $index + 1,
+                $student['name'],
+                $student['matric_no'],
+                $student['final_mark']
+            ];
+        }
+
+        // 打开内存写入
+        $fh = fopen('php://temp', 'rw');
+        foreach ($csvData as $row) {
+            fputcsv($fh, $row);
+        }
+        rewind($fh);
+        $csvOutput = stream_get_contents($fh);
+        fclose($fh);
+
+        // 返回 CSV 响应
+        $filename = 'course_ranking_' . preg_replace('/\s+/', '_', strtolower($courseName)) . '.csv';
+        $response->getBody()->write($csvOutput);
+        return $response
+            ->withHeader('Content-Type', 'text/csv')
+            ->withHeader('Content-Disposition', 'attachment; filename="' . $filename . '"');
+    });
+    // student course ranking API
+    // $app->get('/api/student/course-ranking/{course_id}', function ($request, $response, $args) use ($pdo) {
+    //     $courseId = $args['course_id'];
+
+    //     // 获取课程名称
+    //     $courseStmt = $pdo->prepare("SELECT name FROM courses WHERE id = ?");
+    //     $courseStmt->execute([$courseId]);
+    //     $course = $courseStmt->fetch(PDO::FETCH_ASSOC);
+    //     $courseName = $course ? $course['name'] : 'Unknown Course';
+
+    //     // 获取课程中所有学生及其总分
+    //     $stmt = $pdo->prepare("
+    //         SELECT u.id AS student_id, u.name, u.matric_no, fr.final_mark
+    //         FROM users u
+    //         JOIN final_results fr ON u.id = fr.student_id
+    //         WHERE fr.course_id = ? AND u.role = 'student'
+    //         ORDER BY fr.final_mark DESC
+    //     ");
+    //     $stmt->execute([$courseId]);
+    //     $ranking = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    //     // 为每个学生附加 component 分数
+    //     foreach ($ranking as &$student) {
+    //         $compStmt = $pdo->prepare("
+    //             SELECT ac.name, cg.component_mark AS mark
+    //             FROM component_grades cg
+    //             JOIN assessment_components ac ON cg.component_id = ac.id
+    //             WHERE cg.student_id = ? AND cg.course_id = ?
+    //         ");
+    //         $compStmt->execute([$student['student_id'], $courseId]);
+    //         $student['components'] = $compStmt->fetchAll(PDO::FETCH_ASSOC);
+    //     }
+
+    //     $response->getBody()->write(json_encode([
+    //         'success' => true,
+    //         'course_name' => $courseName,
+    //         'ranking' => $ranking
+    //     ]));
+    //     return $response->withHeader('Content-Type', 'application/json');
+    // });
+    $app->get('/api/student/course-ranking/{course_id}', function ($request, $response, $args) use ($pdo) {
+        $courseId = $args['course_id'];
+
+        // 获取课程名称
+        $courseStmt = $pdo->prepare("SELECT name FROM courses WHERE id = ?");
+        $courseStmt->execute([$courseId]);
+        $course = $courseStmt->fetch(PDO::FETCH_ASSOC);
+        $courseName = $course ? $course['name'] : 'Unknown Course';
+
+        // 获取课程中所有学生及其总分 + feedback
+        $stmt = $pdo->prepare("
+            SELECT u.id AS student_id, u.name, u.matric_no, fr.final_mark, fr.feedback
+            FROM users u
+            JOIN final_results fr ON u.id = fr.student_id
+            WHERE fr.course_id = ? AND u.role = 'student'
+            ORDER BY fr.final_mark DESC
+        ");
+        $stmt->execute([$courseId]);
+        $ranking = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // 为每个学生附加 component 分数
+        foreach ($ranking as &$student) {
+            $compStmt = $pdo->prepare("
+                SELECT ac.name, cg.component_mark AS mark
+                FROM component_grades cg
+                JOIN assessment_components ac ON cg.component_id = ac.id
+                WHERE cg.student_id = ? AND cg.course_id = ?
+            ");
+            $compStmt->execute([$student['student_id'], $courseId]);
+            $student['components'] = $compStmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'course_name' => $courseName,
+            'ranking' => $ranking
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+    });
+
+    $app->post('/api/remark-request', function ($req, $res, $args) use ($pdo) {
+        $data = $req->getParsedBody();
+        $stmt = $pdo->prepare("INSERT INTO remark_requests (student_id, course_id) VALUES (?, ?)");
+
+        try {
+            $stmt->execute([$data['student_id'], $data['course_id']]);
+
+            $res->getBody()->write(json_encode(['success' => true]));
+            return $res->withHeader('Content-Type', 'application/json')->withStatus(200);
+        } catch (PDOException $e) {
+            $res->getBody()->write(json_encode([
+                'success' => false,
+                'message' => 'You have already submitted a request for this course.'
+            ]));
+            return $res->withHeader('Content-Type', 'application/json')->withStatus(400);
+        }
+    });
+
+    $app->get('/api/lecturer/remark-requests', function ($req, $res) use ($pdo) {
+        $stmt = $pdo->query("
+            SELECT rr.id, u.name AS student_name, c.name AS course_name, rr.status
+            FROM remark_requests rr
+            JOIN users u ON rr.student_id = u.id
+            JOIN courses c ON rr.course_id = c.id
+        ");
+        $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $res->getBody()->write(json_encode([
+            'success' => true,
+            'requests' => $requests
+        ]));
+        return $res->withHeader('Content-Type', 'application/json')->withStatus(200);
+    });
+
+    $app->put('/api/remark-request/{id}', function ($req, $res, $args) use ($pdo) {
+        $id = $args['id'];
+        $data = $req->getParsedBody();
+
+        $stmt = $pdo->prepare("UPDATE remark_requests SET status = ? WHERE id = ?");
+        $stmt->execute([$data['status'], $id]);
+
+        $res->getBody()->write(json_encode(['success' => true]));
+        return $res->withHeader('Content-Type', 'application/json')->withStatus(200);
+    });
+
+    // $app->post('/api/request-password-reset', function (Request $request, Response $response) use ($app) {
+    //     $data = $request->getParsedBody();
+    //     $email = $data['email'];
+
+    //     $db = $app->getContainer()->get('db'); // ✅ 修复这里
+    //     $stmt = $db->prepare("SELECT * FROM users WHERE email = ?");
+    //     $stmt->execute([$email]);
+    //     $user = $stmt->fetch();
+
+    //     if ($user) {
+    //         $token = bin2hex(random_bytes(32));
+    //         $expires = date('Y-m-d H:i:s', strtotime('+1 hour'));
+
+    //         $stmt = $db->prepare("UPDATE users SET reset_token = ?, reset_expires = ? WHERE email = ?");
+    //         $stmt->execute([$token, $expires, $email]);
+
+    //         $resetLink = "http://localhost:8081/reset-password?token=$token";
+    //         mail($email, "Reset Your Password", "Click this link to reset your password: $resetLink");
+
+    //         $response->getBody()->write(json_encode(['success' => true, 'message' => 'Reset link sent to email.']));
+    //         return $response->withHeader('Content-Type', 'application/json');
+    //     }
+
+    //     $response->getBody()->write(json_encode(['success' => false, 'message' => 'Email not found.']));
+    //     return $response->withHeader('Content-Type', 'application/json');
+    // });
+
+    // $app->post('/api/reset-password', function (Request $request, Response $response) use ($app) {
+    //     $data = $request->getParsedBody();
+    //     $token = $data['token'];
+    //     $newPassword = password_hash($data['password'], PASSWORD_DEFAULT);
+
+    //     $db = $app->getContainer()->get('db'); // ✅ 修复这里
+    //     $stmt = $db->prepare("SELECT * FROM users WHERE reset_token = ? AND reset_expires > NOW()");
+    //     $stmt->execute([$token]);
+    //     $user = $stmt->fetch();
+
+    //     if ($user) {
+    //         $stmt = $db->prepare("UPDATE users SET password = ?, reset_token = NULL, reset_expires = NULL WHERE id = ?");
+    //         $stmt->execute([$newPassword, $user['id']]);
+
+    //         $response->getBody()->write(json_encode(['success' => true]));
+    //         return $response->withHeader('Content-Type', 'application/json');
+    //     }
+
+    //     $response->getBody()->write(json_encode(['success' => false, 'message' => 'Token expired or invalid.']));
+    //     return $response->withHeader('Content-Type', 'application/json');
+    // });
+
+    $app->get('/api/student/{student_id}/final-marks', function ($request, $response, $args) use ($pdo) {
+        $studentId = $args['student_id'];
+
+        $stmt = $pdo->prepare("
+            SELECT c.name AS course_name, fr.final_mark
+            FROM final_results fr
+            JOIN courses c ON fr.course_id = c.id
+            WHERE fr.student_id = ?
+        ");
+        $stmt->execute([$studentId]);
+        $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'data' => $results
+        ]));
+
+        return $response->withHeader('Content-Type', 'application/json');
+    });
+
+    $app->get('/api/student/{id}/notifications', function ($request, $response, $args) use ($pdo) {
+        $studentId = $args['id'];
+
+        $stmt = $pdo->prepare("SELECT * FROM notifications WHERE student_id = ? ORDER BY created_at DESC");
+        $stmt->execute([$studentId]);
+        $notifications = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'notifications' => $notifications
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+    });
+
+    $app->post('/api/student/notification/{id}/read', function ($request, $response, $args) use ($pdo) {
+        $notificationId = $args['id'];
+
+        $stmt = $pdo->prepare("UPDATE notifications SET is_read = 1 WHERE id = ?");
+        $stmt->execute([$notificationId]);
+
+        $response->getBody()->write(json_encode([
+            'success' => true
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+    });
 };
