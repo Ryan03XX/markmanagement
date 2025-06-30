@@ -32,6 +32,7 @@
             <select v-model="role" required>
               <option disabled value="">-- Select Role --</option>
               <option value="admin">Admin</option>
+              <option value="advisor">Advisor</option>
               <option value="lecturer">Lecturer</option>
               <option value="student">Student</option>
             </select>
@@ -42,7 +43,7 @@
             <input type="text" v-model="name" required />
           </div>
 
-          <div class="form-group" v-if="role === 'admin' || role === 'lecturer'">
+          <div class="form-group" v-if="role === 'admin' || role === 'lecturer' || role === 'advisor'">
             <label>Email:</label>
             <input type="email" v-model="email" required />
           </div>
@@ -100,7 +101,7 @@ export default {
         role: this.role
       }
 
-      if (this.role === 'admin' || this.role === 'lecturer') {
+      if (this.role === 'admin' || this.role === 'lecturer' || this.role === 'advisor') {
         payload.email = this.email
       } else if (this.role === 'student') {
         payload.matric_no = this.matricNo

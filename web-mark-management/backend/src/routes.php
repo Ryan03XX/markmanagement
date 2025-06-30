@@ -1146,4 +1146,86 @@ return function (App $app, PDO $pdo) {
         ]));
         return $response->withHeader('Content-Type', 'application/json');
     });
+
+    $app->get('/api/student/matric/{matric_no}/enrolled-courses', function ($request, $response, $args) use ($pdo) {
+        $matricNo = $args['matric_no'];
+
+        // 查找 student_id
+        $stmt = $pdo->prepare("SELECT id FROM users WHERE matric_no = ? AND role = 'student'");
+        $stmt->execute([$matricNo]);
+        $student = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$student) {
+            $response->getBody()->write(json_encode([
+                'success' => false,
+                'message' => 'Student not found.'
+            ]));
+            return $response->withHeader('Content-Type', 'application/json')->withStatus(404);
+        }
+
+        $studentId = $student['id'];
+
+        // 查找学生已报名的课程
+        $stmt = $pdo->prepare("
+            SELECT 
+                courses.id,
+                courses.code,
+                courses.name,
+                users.name AS instructor
+            FROM course_enrollments
+            JOIN courses ON course_enrollments.course_id = courses.id
+            LEFT JOIN users ON courses.lecturer_id = users.id
+            WHERE course_enrollments.student_id = ?
+        ");
+        $stmt->execute([$studentId]);
+        $courses = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'courses' => $courses
+        ]));
+        return $response->withHeader('Content-Type', 'application/json');
+    });
+
+    $app->get('/api/student/by-matric-no/{matric_no}/course/{course_id}/result', function ($request, $response, $args) use ($pdo) {
+        $matricNo = $args['matric_no'];
+        $courseId = $args['course_id'];
+
+        // Step 1: 通过 matric_no 查找 student_id
+        $stmt = $pdo->prepare("SELECT id FROM users WHERE matric_no = ? AND role = 'student'");
+        $stmt->execute([$matricNo]);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$user) {
+            return $response->withStatus(404)->withHeader('Content-Type', 'application/json')
+                ->write(json_encode(['success' => false, 'message' => 'Student not found']));
+        }
+
+        $studentId = $user['id'];
+
+        // Step 2: 获取 final_results 表中的 final_exam_mark 和 final_mark
+        $stmt = $pdo->prepare("SELECT final_exam_mark, final_mark FROM final_results WHERE student_id = ? AND course_id = ?");
+        $stmt->execute([$studentId, $courseId]);
+        $finalResult = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        // Step 3: 获取各个 component 的成绩
+        $stmt = $pdo->prepare("
+            SELECT ac.name AS component_name, cg.component_mark AS mark
+            FROM component_grades cg
+            JOIN assessment_components ac ON cg.component_id = ac.id
+            WHERE cg.student_id = ? AND cg.course_id = ?
+        ");
+        $stmt->execute([$studentId, $courseId]);
+        $componentResults = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Step 4: 返回 JSON 响应
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'student_id' => $studentId,
+            'final_result' => $finalResult,
+            'component_results' => $componentResults
+        ]));
+
+        return $response->withHeader('Content-Type', 'application/json');
+    });
 };

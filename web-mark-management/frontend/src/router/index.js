@@ -17,6 +17,10 @@ import StudentRankingView from '../views/students/RankingView.vue';
 import StudentGradeView from '../views/students/GradeView.vue';
 import StudentEnrollView from '../views/students/EnrollView.vue';
 import RemarkRequests from '../views/lecturer/RemarkRequests.vue';
+import AdvisorLogin from '@/views/advisor/AdvisorLogin.vue'
+import AdvisorDashboard from '@/views/advisor/AdvisorDashboard.vue'
+import AdvisorRankingView from '@/views/advisor/AdvisorRankingView.vue'
+import AdvisorStudentCheck from '@/views/advisor/AdvisorStudentCheck.vue'
 
 const routes = [
   {
@@ -44,6 +48,10 @@ const routes = [
   { path: '/student/grades', component: StudentGradeView },
   { path: '/student/enroll', component: StudentEnrollView },
   { path: '/lecturer/remark-requests', component: RemarkRequests },
+  { path: '/advisor/login', component: AdvisorLogin },
+  { path: '/advisor/dashboard', component: AdvisorDashboard },
+  { path: '/advisor/ranking', component: AdvisorRankingView },
+  { path: '/advisor/students', component: AdvisorStudentCheck },
   {
     path: '/forgot-password',
     component: () => import('@/views/ForgotPassword.vue')
