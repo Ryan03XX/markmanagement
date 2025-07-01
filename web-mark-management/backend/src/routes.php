@@ -5,6 +5,8 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 use App\Middleware\AuthMiddleware;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 require_once __DIR__ . '/utils.php';
 
 return function (App $app, PDO $pdo) {
@@ -44,6 +46,7 @@ return function (App $app, PDO $pdo) {
 
         if ($user && hash('sha256', $password) === $user['password']) {
             $token = generateJWT($user, $_ENV['JWT_SECRET']);
+            logAction($pdo, $user['id'], 'login', 'Student logged in');
             $response->getBody()->write(json_encode([
                 'success' => true,
                 'token' => $token,
@@ -99,7 +102,7 @@ return function (App $app, PDO $pdo) {
         if ($user && hash('sha256', $password) === $user['password']) {
             // 生成 JWT
             $token = generateJWT($user, $_ENV['JWT_SECRET']);
-
+            logAction($pdo, $user['id'], 'login', 'Staff logged in: ' . $user['email']);
             // 返回用户信息（去掉密码）
             unset($user['password']);
 
@@ -1228,4 +1231,186 @@ return function (App $app, PDO $pdo) {
 
         return $response->withHeader('Content-Type', 'application/json');
     });
+
+    // $app->get('/api/lecturer/grade/template', function (Request $request, Response $response) {
+    //     $spreadsheet = new Spreadsheet();
+    //     $sheet = $spreadsheet->getActiveSheet();
+
+    //     // 设置表头
+    //     $sheet->setCellValue('A1', 'student_id');
+    //     $sheet->setCellValue('B1', 'component_id');
+    //     $sheet->setCellValue('C1', 'component_mark');
+    //     $sheet->setCellValue('D1', 'final_exam_mark');
+    //     $sheet->setCellValue('E1', 'feedback');
+
+    //     // 示例数据
+    //     $sheet->setCellValue('A2', '1');
+    //     $sheet->setCellValue('B2', '3');
+    //     $sheet->setCellValue('C2', '85');
+    //     $sheet->setCellValue('D2', '75');
+    //     $sheet->setCellValue('E2', 'Good work');
+
+    //     $writer = new Xlsx($spreadsheet);
+
+    //     $filename = 'grade_template.xlsx';
+    //     $tempFile = tempnam(sys_get_temp_dir(), $filename);
+    //     $writer->save($tempFile);
+
+    //     $stream = new \Slim\Psr7\Stream(fopen($tempFile, 'rb'));
+
+    //     return $response
+    //         ->withHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    //         ->withHeader('Content-Disposition', 'attachment; filename="' . $filename . '"')
+    //         ->withBody($stream);
+    // });
+
+    // $app->post('/api/lecturer/grade/import', function (Request $request, Response $response) use ($pdo) {
+    //     $uploadedFiles = $request->getUploadedFiles();
+
+    //     if (empty($uploadedFiles['file'])) {
+    //         return $response->withStatus(400)->withJson(['success' => false, 'message' => 'No file uploaded']);
+    //     }
+
+    //     $file = $uploadedFiles['file'];
+    //     if ($file->getError() !== UPLOAD_ERR_OK) {
+    //         return $response->withStatus(400)->withJson(['success' => false, 'message' => 'Upload failed']);
+    //     }
+
+    //     $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($file->getStream()->getMetadata('uri'));
+    //     $sheet = $spreadsheet->getActiveSheet();
+    //     $rows = $sheet->toArray();
+
+    //     $courseId = $_POST['course_id'] ?? null;
+    //     if (!$courseId) {
+    //         return $response->withStatus(400)->withJson(['success' => false, 'message' => 'Course ID is required']);
+    //     }
+
+    //     $header = array_map('strtolower', $rows[0]);
+    //     for ($i = 1; $i < count($rows); $i++) {
+    //         $row = array_combine($header, $rows[$i]);
+
+    //         $studentId = $row['student_id'];
+    //         $componentId = $row['component_id'];
+    //         $componentMark = $row['component_mark'];
+    //         $finalExamMark = $row['final_exam_mark'];
+    //         $feedback = $row['feedback'];
+
+    //         // 插入或更新 component_grades
+    //         $stmt = $pdo->prepare("
+    //             INSERT INTO component_grades (course_id, student_id, component_id, component_mark)
+    //             VALUES (?, ?, ?, ?)
+    //             ON DUPLICATE KEY UPDATE component_mark = VALUES(component_mark)
+    //         ");
+    //         $stmt->execute([$courseId, $studentId, $componentId, $componentMark]);
+
+    //         // 计算component总成绩
+    //         $stmt = $pdo->prepare("SELECT weight FROM assessment_components WHERE id = ?");
+    //         $stmt->execute([$componentId]);
+    //         $component = $stmt->fetch(PDO::FETCH_ASSOC);
+    //         $componentMarkWeighted = $component ? $componentMark * ($component['weight'] / 100) : 0;
+
+    //         // 获取所有该学生该课程的component总分
+    //         $stmt = $pdo->prepare("
+    //             SELECT cg.component_mark, ac.weight
+    //             FROM component_grades cg
+    //             JOIN assessment_components ac ON cg.component_id = ac.id
+    //             WHERE cg.course_id = ? AND cg.student_id = ?
+    //         ");
+    //         $stmt->execute([$courseId, $studentId]);
+    //         $components = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    //         $totalComponentMark = 0;
+    //         foreach ($components as $comp) {
+    //             $totalComponentMark += $comp['component_mark'] * ($comp['weight'] / 100);
+    //         }
+
+    //         $finalMark = round(($totalComponentMark * 0.7) + ($finalExamMark * 0.3), 2);
+
+    //         $stmt = $pdo->prepare("
+    //             INSERT INTO final_results (course_id, student_id, final_exam_mark, final_mark, feedback)
+    //             VALUES (?, ?, ?, ?, ?)
+    //             ON DUPLICATE KEY UPDATE
+    //                 final_exam_mark = VALUES(final_exam_mark),
+    //                 final_mark = VALUES(final_mark),
+    //                 feedback = VALUES(feedback),
+    //                 updated_at = CURRENT_TIMESTAMP
+    //         ");
+    //         $stmt->execute([$courseId, $studentId, $finalExamMark, $finalMark, $feedback]);
+
+    //         $stmt = $pdo->prepare("SELECT code, name FROM courses WHERE id = ?");
+    //         $stmt->execute([$courseId]);
+    //         $course = $stmt->fetch(PDO::FETCH_ASSOC);
+    //         $courseName = $course ? "[{$course['code']} - {$course['name']}]" : "Course ID $courseId";
+
+    //         $message = "Your grade for $courseName has been updated.";
+    //         $stmt = $pdo->prepare("INSERT INTO notifications (student_id, message, created_at) VALUES (?, ?, NOW())");
+    //         $stmt->execute([$studentId, $message]);
+    //     }
+
+    //     return $response->withJson(['success' => true, 'message' => 'Grades imported successfully']);
+    // })->add(new AuthMiddleware($_ENV['JWT_SECRET'], 'lecturer'));
+
+    $app->get('/api/admin/logs', function (Request $request, Response $response) use ($pdo) {
+        $stmt = $pdo->query("
+            SELECT logs.*, users.name 
+            FROM logs 
+            JOIN users ON logs.user_id = users.id 
+            ORDER BY logs.timestamp DESC
+        ");
+        $logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // ✅ 正确地写入响应体
+        $response->getBody()->write(json_encode($logs));
+
+        return $response->withHeader('Content-Type', 'application/json');
+    });
+
+    $app->get('/api/student/{student_id}/course/{course_id}/what-if', function (Request $request, Response $response, array $args) use ($pdo) {
+        $studentId = $args['student_id'];
+        $courseId = $args['course_id'];
+
+        // 获取 component 分数 + weight
+        $stmt = $pdo->prepare("
+            SELECT ac.id AS component_id, ac.name AS component_name, ac.weight, cg.component_mark AS mark
+            FROM assessment_components ac
+            LEFT JOIN component_grades cg 
+                ON ac.id = cg.component_id AND cg.student_id = ? AND cg.course_id = ?
+            WHERE ac.course_id = ?
+        ");
+        $stmt->execute([$studentId, $courseId, $courseId]);
+        $components = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // 获取 final_exam_mark
+        $stmt = $pdo->prepare("SELECT final_exam_mark FROM final_results WHERE student_id = ? AND course_id = ?");
+        $stmt->execute([$studentId, $courseId]);
+        $final = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'component_results' => $components,
+            'final_exam_mark' => $final['final_exam_mark'] ?? 0
+        ]));
+
+        return $response->withHeader('Content-Type', 'application/json');
+    });
+
+    $app->post('/api/student/{id}/notify', function ($request, $response, $args) use ($pdo) {
+        $studentId = $args['id'];
+        $body = json_decode($request->getBody(), true);
+        $message = $body['message'] ?? 'You have a new notification.';
+
+        $stmt = $pdo->prepare("INSERT INTO notifications (student_id, message, created_at) VALUES (?, ?, NOW())");
+        $stmt->execute([$studentId, $message]);
+
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'message' => 'Notification sent'
+        ]));
+
+        return $response->withHeader('Content-Type', 'application/json');
+    });
 };
+
+function logAction($pdo, $user_id, $action, $details = null) {
+    $stmt = $pdo->prepare("INSERT INTO logs (user_id, action, details) VALUES (?, ?, ?)");
+    $stmt->execute([$user_id, $action, $details]);
+}
